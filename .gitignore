@@ -1,0 +1,75 @@
+## .NET Core / .NET 9
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+*.cache
+
+## User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
+
+## Visual Studio / Rider
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+## Configuration files with secrets
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.json
+
+## EXCEPT base template
+!appsettings.json
+
+## User Secrets
+secrets.json
+
+## Database files
+*.db
+*.db-shm
+*.db-wal
+
+## Logs
+logs/
+*.log
+
+## Migration scripts (optional - uncomment if you want to exclude)
+# **/Migrations/
+
+## Environment variables
+.env
+.env.local
+.env.production
+
+## Publish profiles
+**/PublishProfiles/
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+## Test results
+TestResults/
+*.trx
+*.coverage
