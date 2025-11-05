@@ -7,16 +7,15 @@ using FinanceTracker.Api.Models;
 
 namespace FinanceTracker.Api.Services;
 
-public class TelegramService : ITelegramService
-{
-    private readonly ITelegramBotClient _botClient;
+public class TelegramService : ITelegramService {
+    private readonly TelegramBotClient _botClient;
     private readonly IUserService _userService;
     private readonly ICategoryService _categoryService;
     private readonly ITransactionService _transactionService;
     private readonly ILogger<TelegramService> _logger;
 
     public TelegramService(
-        ITelegramBotClient botClient,
+        TelegramBotClient botClient,
         IUserService userService,
         ICategoryService categoryService,
         ITransactionService transactionService,
@@ -31,16 +30,14 @@ public class TelegramService : ITelegramService
 
     public async Task SendMessageAsync(long chatId, string message)
     {
-        try
-        {
-            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, cancellationToken: default);
-        }
-        catch (Exception ex)
-        {
+        try {
+            await _botClient.SendMessage(new ChatId(chatId), message, parseMode: ParseMode.Markdown, cancellationToken: default);
+        } catch (Exception ex) {
             _logger.LogError(ex, "Failed to send message to chat {ChatId}", chatId);
             throw;
         }
     }
+
 
     public async Task ProcessUpdateAsync(Update update)
     {
