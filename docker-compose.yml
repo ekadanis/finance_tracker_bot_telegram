@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:15
+    container_name: financetrackerapi-db-1
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: finance_tracker_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d finance_tracker_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: financetrackerapi-api-1
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:80
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres};Database=finance_tracker_dev"
+      TelegramSettings__BotToken: ${TELEGRAM_BOT_TOKEN}
+      TelegramSettings__WebhookUrl: ${WEBHOOK_URL}
+    ports:
+      - "8081:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test:
+        ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: financetrackerapi-cloudflared-1
+    restart: unless-stopped
+    command: tunnel run --token eyJhIjoiOWM1YWU0OGJjYWUzMmYxZjgxOGVkNTc0OGRjZGMzMWYiLCJ0IjoiM2Y2NGFhMTktNjEzMi00MDhhLThmZGItNWQ3YzcwZjJhYjNjIiwicyI6Ik1XUTJZVGhrWmpJdE5HWm1PUzAwTVdFNUxUazFNV1V0WldNMU1UWTVZek00WVROaiJ9 
+    networks:
+      - app-network
+
+volumes:
+  pgdata_prod:
+
+networks:
+  app-network:
+    driver: bridge

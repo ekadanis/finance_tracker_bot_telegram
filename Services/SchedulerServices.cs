@@ -48,13 +48,16 @@ public class SchedulerService : BackgroundService
         var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
 
         var users = await userService.GetAllUsersAsync();
-        var today = DateTime.UtcNow.Date;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         foreach (var user in users)
         {
             try
             {
-                var (income, expense, balance) = await transactionService.GetRecapAsync(user.Id, today, today);
+                var recap = await transactionService.GetRecapAsync(user.Id, today, today);
+                var income = recap.Item1;
+                var expense = recap.Item2;
+                var balance = recap.Item3;
 
                 var message = $"📅 *Rekap Harian {today:dd/MM/yyyy}*\n\n" +
                              $"📈 Pemasukan: Rp{income:N0}\n" +

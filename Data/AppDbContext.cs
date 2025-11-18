@@ -46,6 +46,9 @@ public class AppDbContext : DbContext
                 .HasConversion<string>()
                 .HasMaxLength(20);
             entity.Property(e => e.Note).HasMaxLength(500);
+            entity.Property(e => e.Date)
+                .HasColumnType("date")
+                .IsRequired();
 
             entity.HasOne(e => e.User)
                 .WithMany(u => u.Transactions)

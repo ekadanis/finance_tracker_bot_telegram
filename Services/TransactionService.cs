@@ -13,7 +13,7 @@ public class TransactionService : ITransactionService
         _context = context;
     }
 
-    public async Task<Transaction> AddTransactionAsync(Guid userId, Guid categoryId, TransactionType type, decimal amount, string note, DateTime date)
+    public async Task<Transaction> AddTransactionAsync(Guid userId, Guid categoryId, TransactionType type, decimal amount, string note, DateOnly date)
     {
         var transaction = new Transaction
         {
@@ -64,7 +64,7 @@ public class TransactionService : ITransactionService
         return (income, expense);
     }
 
-    public async Task<(decimal Income, decimal Expense, decimal Balance)> GetRecapAsync(Guid userId, DateTime startDate, DateTime endDate)
+    public async Task<(decimal Income, decimal Expense, decimal Balance)> GetRecapAsync(Guid userId, DateOnly startDate, DateOnly endDate)
     {
         var transactions = await _context.Transactions
             .Where(t => t.UserId == userId && t.Date >= startDate && t.Date <= endDate)
@@ -76,8 +76,15 @@ public class TransactionService : ITransactionService
         return (income, expense, income - expense);
     }
 
-    public async Task<List<Transaction>> GetTransactionsByPeriodAsync(Guid userId, DateTime startDate, DateTime endDate)
+    public async Task<List<Transaction>> GetTransactionsByPeriodAsync(Guid userId, DateOnly startDate, DateOnly endDate)
     {
+        if (endDate < startDate)
+        {
+            var tmp = startDate;
+            startDate = endDate;
+            endDate = tmp;
+        }
+
         return await _context.Transactions
             .Include(t => t.User)
             .Include(t => t.Category)

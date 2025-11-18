@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using FinanceTracker.Api.DTOs;
 using FinanceTracker.Api.Services;
-using FinanceTracker.Api.Models;
 
 namespace FinanceTracker.Api.Controllers;
 
@@ -28,39 +27,32 @@ public class TransactionController : ControllerBase
 
     // POST /Api/transaction
     [HttpPost]
-    public async Task<ActionResult<TransactionResponseDto>> CreateTransaction([FromBody] CreateTransactionDto dto)
+    public async Task<ActionResult<ApiResponse<TransactionResponseDto>>> CreateTransaction([FromBody] CreateTransactionDto dto)
     {
         try
         {
-            // Get or create user
-            var user = await _userService.GetUserByTelegramIdAsync(dto.TelegramId);
-            if (user == null)
-            {
-                return BadRequest(new { error = "User not found. Please register first." });
-            }
+            var username = dto.Username ?? $"User_{dto.TelegramId}";
+            var user = await _userService.GetOrCreateUserAsync(dto.TelegramId, username);
 
-            // Get or create category
             var category = await _categoryService.GetOrCreateCategoryAsync(user.Id, dto.CategoryName, dto.Type);
             if (category == null)
             {
-                return BadRequest(new { error = "Failed to get or create category" });
+                return BadRequest(ApiResponse<TransactionResponseDto>.ErrorResponse("Failed to create or retrieve category"));
             }
 
-            // Create transaction
-            var transactionDate = dto.Date ?? DateTime.UtcNow;
+            var transactionDate = dto.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
             var transaction = await _transactionService.AddTransactionAsync(
                 user.Id,
                 category.Id,
                 dto.Type,
                 dto.Amount,
-                dto.Note,
+                dto.Note ?? string.Empty,
                 transactionDate
             );
 
             var response = new TransactionResponseDto
             {
                 Id = transaction.Id,
-                Username = user.Username,
                 CategoryName = category.Name,
                 Type = transaction.Type,
                 Amount = transaction.Amount,
@@ -69,58 +61,96 @@ public class TransactionController : ControllerBase
                 CreatedAt = transaction.CreatedAt
             };
 
-            return CreatedAtAction(nameof(GetTransaction), new { id = transaction.Id }, response);
+            return Ok(ApiResponse<TransactionResponseDto>.SuccessResponse(response, "Transaction created successfully"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating transaction");
-            return StatusCode(500, new { error = "Internal server error" });
+            return StatusCode(500, ApiResponse<TransactionResponseDto>.ErrorResponse("Internal server error"));
         }
     }
 
-    // GET /Api/transaction/{id}
-    [HttpGet("{id}")]
-    public async Task<ActionResult<TransactionResponseDto>> GetTransaction(Guid id)
-    {
-        try
-        {
-            var transaction = await _transactionService.GetTransactionByIdAsync(id);
-            if (transaction == null)
-            {
-                return NotFound();
-            }
-
-            var response = new TransactionResponseDto
-            {
-                Id = transaction.Id,
-                Username = transaction.User.Username,
-                CategoryName = transaction.Category.Name,
-                Type = transaction.Type,
-                Amount = transaction.Amount,
-                Note = transaction.Note,
-                Date = transaction.Date,
-                CreatedAt = transaction.CreatedAt
-            };
-
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting transaction {TransactionId}", id);
-            return StatusCode(500, new { error = "Internal server error" });
-        }
-    }
-
-    // POST /Api/transaction/balance
-    [HttpPost("balance")]
-    public async Task<ActionResult<BalanceResponseDto>> GetBalance([FromBody] long telegramId)
+    // GET /Api/transaction
+    [HttpGet]
+    public async Task<ActionResult<ApiResponse<List<TransactionResponseDto>>>> GetTransactions(
+        [FromQuery] long telegramId,
+        [FromQuery] string? startDate = null,
+        [FromQuery] string? endDate = null)
     {
         try
         {
             var user = await _userService.GetUserByTelegramIdAsync(telegramId);
             if (user == null)
             {
-                return NotFound(new { error = "User not found" });
+                return NotFound(ApiResponse<List<TransactionResponseDto>>.ErrorResponse("User not found"));
+            }
+
+            DateOnly? start = null;
+            DateOnly? end = null;
+
+            // Parse startDate if provided
+            if (!string.IsNullOrWhiteSpace(startDate))
+            {
+                if (!DateOnly.TryParseExact(startDate, "yyyy-MM-dd", 
+                    System.Globalization.CultureInfo.InvariantCulture, 
+                    System.Globalization.DateTimeStyles.None, out var parsedStart))
+                {
+                    return BadRequest(ApiResponse<List<TransactionResponseDto>>.ErrorResponse("Invalid startDate format. Use: YYYY-MM-DD"));
+                }
+                start = parsedStart;
+            }
+
+            // Parse endDate if provided
+            if (!string.IsNullOrWhiteSpace(endDate))
+            {
+                if (!DateOnly.TryParseExact(endDate, "yyyy-MM-dd", 
+                    System.Globalization.CultureInfo.InvariantCulture, 
+                    System.Globalization.DateTimeStyles.None, out var parsedEnd))
+                {
+                    return BadRequest(ApiResponse<List<TransactionResponseDto>>.ErrorResponse("Invalid endDate format. Use: YYYY-MM-DD"));
+                }
+                end = parsedEnd;
+            }
+
+            // If no dates provided, use wide range to get all transactions
+            var effectiveStart = start ?? new DateOnly(2000, 1, 1);
+            var effectiveEnd = end ?? new DateOnly(2100, 12, 31);
+            
+            _logger.LogInformation("Fetching transactions for user {UserId} from {Start} to {End}", 
+                user.Id, effectiveStart, effectiveEnd);
+            
+            var transactions = await _transactionService.GetTransactionsByPeriodAsync(user.Id, effectiveStart, effectiveEnd);
+
+            var response = transactions.Select(t => new TransactionResponseDto
+            {
+                Id = t.Id,
+                CategoryName = t.Category?.Name ?? "N/A",
+                Type = t.Type,
+                Amount = t.Amount,
+                Note = t.Note ?? string.Empty,
+                Date = t.Date,
+                CreatedAt = t.CreatedAt
+            }).ToList();
+
+            return Ok(ApiResponse<List<TransactionResponseDto>>.SuccessResponse(response));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting transactions");
+            return StatusCode(500, ApiResponse<List<TransactionResponseDto>>.ErrorResponse("Internal server error"));
+        }
+    }
+
+    // GET /Api/transaction/balance
+    [HttpGet("balance")]
+    public async Task<ActionResult<ApiResponse<BalanceResponseDto>>> GetBalance([FromQuery] long telegramId)
+    {
+        try
+        {
+            var user = await _userService.GetUserByTelegramIdAsync(telegramId);
+            if (user == null)
+            {
+                return NotFound(ApiResponse<BalanceResponseDto>.ErrorResponse("User not found"));
             }
 
             var balance = await _transactionService.GetBalanceAsync(user.Id);
@@ -129,31 +159,30 @@ public class TransactionController : ControllerBase
             var response = new BalanceResponseDto
             {
                 TelegramId = user.TelegramId,
-                Username = user.Username,
                 Balance = balance,
                 TotalIncome = income,
                 TotalExpense = expense
             };
 
-            return Ok(response);
+            return Ok(ApiResponse<BalanceResponseDto>.SuccessResponse(response));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting balance for TelegramId {TelegramId}", telegramId);
-            return StatusCode(500, new { error = "Internal server error" });
+            return StatusCode(500, ApiResponse<BalanceResponseDto>.ErrorResponse("Internal server error"));
         }
     }
 
-    // POST /Api/transaction/recap
-    [HttpPost("recap")]
-    public async Task<ActionResult<RecapResponseDto>> GetRecap([FromBody] RecapRequestDto dto)
+    // GET /Api/transaction/recap
+    [HttpGet("recap")]
+    public async Task<ActionResult<ApiResponse<RecapResponseDto>>> GetRecap([FromBody] RecapRequestDto dto)
     {
         try
         {
             var user = await _userService.GetUserByTelegramIdAsync(dto.TelegramId);
             if (user == null)
             {
-                return NotFound(new { error = "User not found" });
+                return NotFound(ApiResponse<RecapResponseDto>.ErrorResponse("User not found"));
             }
 
             var (income, expense, balance) = await _transactionService.GetRecapAsync(user.Id, dto.StartDate, dto.EndDate);
@@ -169,7 +198,6 @@ public class TransactionController : ControllerBase
                 Transactions = transactions.Select(t => new TransactionResponseDto
                 {
                     Id = t.Id,
-                    Username = t.User.Username,
                     CategoryName = t.Category.Name,
                     Type = t.Type,
                     Amount = t.Amount,
@@ -179,12 +207,12 @@ public class TransactionController : ControllerBase
                 }).ToList()
             };
 
-            return Ok(response);
+            return Ok(ApiResponse<RecapResponseDto>.SuccessResponse(response));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting recap");
-            return StatusCode(500, new { error = "Internal server error" });
+            return StatusCode(500, ApiResponse<RecapResponseDto>.ErrorResponse("Internal server error"));
         }
     }
 }
