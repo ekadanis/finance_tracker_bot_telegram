@@ -45,6 +45,10 @@ public class TelegramController : ControllerBase
             
             var update = JsonSerializer.Deserialize<Update>(updateJson.GetRawText(), options);
             
+            // print STRUCTURE UPDATE setelah Deserialize
+            _logger.LogInformation("=================PARSED UPDATE OBJECT=================: {obj}", 
+            JsonSerializer.Serialize(update, options));
+
             if (update == null)
             {
                 _logger.LogWarning("Failed to deserialize update");

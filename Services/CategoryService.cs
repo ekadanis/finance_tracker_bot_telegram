@@ -18,17 +18,14 @@ public class CategoryService : ICategoryService
 
     public async Task<Category?> GetOrCreateCategoryAsync(Guid userId, string categoryName, TransactionType type)
     {
-        // Validasi categoryName tidak boleh kosong
         if (string.IsNullOrWhiteSpace(categoryName))
         {
             _logger.LogWarning("Attempted to create category with empty name for user {UserId}", userId);
-            return null; // Return null jika category name invalid
+            return null;
         }
 
-        // Trim & normalize category name (lowercase untuk case-insensitive)
         var normalizedName = categoryName.Trim().ToLowerInvariant();
 
-        // Cari category dengan case-insensitive comparison
         var category = await _context.Categories
             .FirstOrDefaultAsync(c => c.UserId == userId 
                 && c.Name.ToLower() == normalizedName 
