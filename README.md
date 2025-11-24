@@ -347,22 +347,3 @@ docker-compose logs db
 | **Use Case**    | Development         | Production             |
 
 ---
-
-## 📄 License
-
-MIT License
-
----
-
-## 👨‍💻 Author
-
-**Danis Eka**
-
-- GitHub: [@ekadanis](https://github.com/ekadanis)
-- LinkedIn: [Your Profile](https://linkedin.com/in/yourprofile)
-
----
-
-<div align="center">
-  <sub>Built with ❤️ using .NET 9 and Clean Architecture</sub>
-</div>
