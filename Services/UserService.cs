@@ -1,5 +1,6 @@
 using FinanceTracker.Api.Data;
 using FinanceTracker.Api.Models;
+using FinanceTracker.Api.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTracker.Api.Services;

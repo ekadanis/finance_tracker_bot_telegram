@@ -1,8 +1,6 @@
-using FinanceTracker.Api.Data;
 using FinanceTracker.Api.Models;
-using Microsoft.EntityFrameworkCore;
 
-namespace FinanceTracker.Api.Services;
+namespace FinanceTracker.Api.Interfaces;
 
 public interface ITransactionService
 {

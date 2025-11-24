@@ -1,14 +1,9 @@
 using FinanceTracker.Api.Data;
 using FinanceTracker.Api.Models;
+using FinanceTracker.Api.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTracker.Api.Services;
-
-public interface ICategoryService
-{
-    Task<Category?> GetOrCreateCategoryAsync(Guid userId, string categoryName, TransactionType type);
-    Task<List<Category>> GetUserCategoriesAsync(Guid userId, TransactionType? type = null);
-}
 
 public class CategoryService : ICategoryService
 {
@@ -31,8 +26,7 @@ public class CategoryService : ICategoryService
         }
 
         // Trim & normalize category name (lowercase untuk case-insensitive)
-        categoryName = categoryName.Trim();
-        var normalizedName = categoryName.ToLower();
+        var normalizedName = categoryName.Trim().ToLowerInvariant();
 
         // Cari category dengan case-insensitive comparison
         var category = await _context.Categories
@@ -42,19 +36,17 @@ public class CategoryService : ICategoryService
 
         if (category == null)
         {
-            // Simpan dengan format Capitalized (huruf pertama besar)
-            var formattedName = char.ToUpper(normalizedName[0]) + normalizedName.Substring(1);
-            
             category = new Category
             {
                 UserId = userId,
-                Name = formattedName,
+                Name = CapitalizeFirstLetter(normalizedName),
                 Type = type
             };
+            
             _context.Categories.Add(category);
             await _context.SaveChangesAsync();
             
-            _logger.LogInformation("Created new category '{CategoryName}' for user {UserId}", formattedName, userId);
+            _logger.LogInformation("Created new category '{CategoryName}' for user {UserId}", category.Name, userId);
         }
 
         return category;
@@ -70,5 +62,11 @@ public class CategoryService : ICategoryService
         }
 
         return await query.OrderBy(c => c.Name).ToListAsync();
+    }
+
+    private static string CapitalizeFirstLetter(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        return char.ToUpper(text[0]) + text.Substring(1);
     }
 }

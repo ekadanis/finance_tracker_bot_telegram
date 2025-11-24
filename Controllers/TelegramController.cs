@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using System.Text.Json;
-using FinanceTracker.Api.Services;
+using FinanceTracker.Api.Interfaces;
 
 namespace FinanceTracker.Api.Controllers;
 
@@ -33,13 +33,9 @@ public class TelegramController : ControllerBase
     // POST /Api/Telegram/webhook
     [HttpPost("webhook")]
     public async Task<IActionResult> Webhook([FromBody] JsonElement updateJson)
-    {
-        _logger.LogInformation("=== WEBHOOK RECEIVED (RAW) ===");
-        _logger.LogInformation("Raw JSON: {Json}", updateJson.GetRawText());
-        
+    {    
         try
         {
-            // Deserialize manual dengan options
             var options = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
@@ -55,9 +51,6 @@ public class TelegramController : ControllerBase
                 return BadRequest(new { error = "Invalid update format" });
             }
             
-            _logger.LogInformation("Update ID: {UpdateId}", update.Id);
-            _logger.LogInformation("Update Type: {UpdateType}", update.Type);
-            
             if (update.Message != null)
             {
                 _logger.LogInformation("Message Text: {Text}", update.Message.Text);
@@ -67,7 +60,6 @@ public class TelegramController : ControllerBase
             }
             
             await _telegramService.ProcessUpdateAsync(update);
-            _logger.LogInformation("=== WEBHOOK PROCESSED SUCCESSFULLY ===");
             return Ok();
         }
         catch (Exception ex)
@@ -86,7 +78,6 @@ public class TelegramController : ControllerBase
             var webhookUrl = _configuration["TelegramSettings:WebhookUrl"];
             var botToken = _configuration["TelegramSettings:BotToken"];
 
-            // Tambahkan drop_pending_updates untuk clear old updates
             var url = $"https://api.telegram.org/bot{botToken}/setWebhook?drop_pending_updates=true";
             var payload = new { url = webhookUrl };
             var content = new StringContent(
@@ -115,7 +106,6 @@ public class TelegramController : ControllerBase
         }
     }
 
-    // GET /Api/Telegram/webhookinfo - Cek status webhook
     [HttpGet("webhookinfo")]
     public async Task<IActionResult> GetWebhookInfo()
     {
@@ -128,7 +118,6 @@ public class TelegramController : ControllerBase
                 return BadRequest(new { error = "BotToken not configured in appsettings.json" });
             }
 
-            // Use Telegram API directly
             var url = $"https://api.telegram.org/bot{botToken}/getWebhookInfo";
             var response = await _httpClient.GetAsync(url);
             var responseBody = await response.Content.ReadAsStringAsync();
@@ -144,7 +133,7 @@ public class TelegramController : ControllerBase
         }
     }
 
-    // POST /Api/Telegram/deletewebhook - Hapus webhook (untuk testing)
+    // POST /Api/Telegram/deletewebhook 
     [HttpPost("deletewebhook")]
     public async Task<IActionResult> DeleteWebhook()
     {

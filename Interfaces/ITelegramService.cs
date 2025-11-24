@@ -1,6 +1,6 @@
     using Telegram.Bot.Types;
 
-    namespace FinanceTracker.Api.Services;
+    namespace FinanceTracker.Api.Interfaces;
 
     public interface ITelegramService
     {

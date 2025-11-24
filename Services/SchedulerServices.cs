@@ -1,3 +1,5 @@
+using FinanceTracker.Api.Interfaces;
+
 namespace FinanceTracker.Api.Services;
 
 public class SchedulerService : BackgroundService

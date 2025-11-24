@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using FinanceTracker.Api.DTOs;
-using FinanceTracker.Api.Services;
+using FinanceTracker.Api.Interfaces;
 
 namespace FinanceTracker.Api.Controllers;
 

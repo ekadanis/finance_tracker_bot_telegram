@@ -1,5 +1,6 @@
 using FinanceTracker.Api.Data;
 using FinanceTracker.Api.Models;
+using FinanceTracker.Api.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTracker.Api.Services;
@@ -7,10 +8,12 @@ namespace FinanceTracker.Api.Services;
 public class TransactionService : ITransactionService
 {
     private readonly AppDbContext _context;
+    private readonly ILogger<TransactionService> _logger;
 
-    public TransactionService(AppDbContext context)
+    public TransactionService(AppDbContext context, ILogger<TransactionService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<Transaction> AddTransactionAsync(Guid userId, Guid categoryId, TransactionType type, decimal amount, string note, DateOnly date)
@@ -27,6 +30,9 @@ public class TransactionService : ITransactionService
 
         _context.Transactions.Add(transaction);
         await _context.SaveChangesAsync();
+        
+        _logger.LogInformation("Transaction added: {Type} - Rp{Amount} for user {UserId}", type, amount, userId);
+        
         return transaction;
     }
 
@@ -80,9 +86,7 @@ public class TransactionService : ITransactionService
     {
         if (endDate < startDate)
         {
-            var tmp = startDate;
-            startDate = endDate;
-            endDate = tmp;
+            (startDate, endDate) = (endDate, startDate);
         }
 
         return await _context.Transactions
