@@ -334,16 +334,3 @@ docker-compose logs db
 ```
 
 ---
-
-## 📊 Local vs Docker
-
-| Feature         | Local Development   | Docker Production      |
-| --------------- | ------------------- | ---------------------- |
-| **Setup Time**  | 15 min              | 10 min                 |
-| **Debugging**   | ✅ Full breakpoints | ❌ Logs only           |
-| **Hot Reload**  | ✅ Auto-restart     | ❌ Manual rebuild      |
-| **Daily Recap** | ❌ Disabled         | ✅ Enabled (23:00 WIB) |
-| **URL**         | ngrok (temporary)   | Cloudflare (permanent) |
-| **Use Case**    | Development         | Production             |
-
----
