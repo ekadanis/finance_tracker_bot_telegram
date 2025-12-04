@@ -1,6 +1,6 @@
 using FinanceTracker.Api.Models;
 
-namespace FinanceTracker.Api.Services;
+namespace FinanceTracker.Api.Interfaces;
 
 public interface IUserService
 {

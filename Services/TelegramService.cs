@@ -1,174 +1,113 @@
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using System.Threading;
-using FinanceTracker.Api.Utils;
-using FinanceTracker.Api.Models;
+using FinanceTracker.Api.Helpers;
+using FinanceTracker.Api.Constants;
+using FinanceTracker.Api.Interfaces;
+using System.Text.Json;
 
 namespace FinanceTracker.Api.Services;
 
-public class TelegramService : ITelegramService
+public class TelegramService : ITelegramService 
 {
-    private readonly ITelegramBotClient _botClient;
+    private readonly string _botToken;
     private readonly IUserService _userService;
-    private readonly ICategoryService _categoryService;
-    private readonly ITransactionService _transactionService;
+    private readonly IEnumerable<ICommandHandler> _commandHandlers;
     private readonly ILogger<TelegramService> _logger;
+    private readonly HttpClient _httpClient;
 
     public TelegramService(
         ITelegramBotClient botClient,
+        IConfiguration configuration,
         IUserService userService,
-        ICategoryService categoryService,
-        ITransactionService transactionService,
-        ILogger<TelegramService> logger)
+        IEnumerable<ICommandHandler> commandHandlers,
+        ILogger<TelegramService> logger,
+        IHttpClientFactory httpClientFactory)
     {
-        _botClient = botClient;
+        _botToken = configuration["TelegramSettings:BotToken"] ?? throw new ArgumentNullException("BotToken");
         _userService = userService;
-        _categoryService = categoryService;
-        _transactionService = transactionService;
+        _commandHandlers = commandHandlers;
         _logger = logger;
+        _httpClient = httpClientFactory.CreateClient();
     }
 
     public async Task SendMessageAsync(long chatId, string message)
     {
-        try
+        try 
         {
-            await _botClient.SendTextMessageAsync(chatId, message, parseMode: ParseMode.Markdown, cancellationToken: default);
-        }
-        catch (Exception ex)
+            var url = $"https://api.telegram.org/bot{_botToken}/sendMessage";
+            var payload = new
+            {
+                chat_id = chatId,
+                text = message,
+                parse_mode = "Markdown"
+            };
+
+            var content = new StringContent(
+                JsonSerializer.Serialize(payload),
+                System.Text.Encoding.UTF8,
+                "application/json"
+            );
+
+            var response = await _httpClient.PostAsync(url, content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Failed to send message. Status: {Status}, Response: {Response}", 
+                    response.StatusCode, errorBody);
+            }
+        } 
+        catch (Exception ex) 
         {
-            _logger.LogError(ex, "Failed to send message to chat {ChatId}", chatId);
-            throw;
+            _logger.LogError(ex, "Exception when sending message to chat {ChatId}", chatId);
         }
     }
 
     public async Task ProcessUpdateAsync(Update update)
     {
+        _logger.LogInformation("ProcessUpdateAsync called. Update Type: {Type}", update.Type);
+        
         if (update.Type != UpdateType.Message || update.Message?.Text == null)
+        {
+            _logger.LogWarning("Update ignored. Type: {Type}, HasMessage: {HasMessage}, HasText: {HasText}", 
+                update.Type, 
+                update.Message != null, 
+                update.Message?.Text != null);
             return;
+        }
 
         var message = update.Message;
         var chatId = message.Chat.Id;
+        var telegramId = message.From?.Id ?? 0;
         var text = message.Text;
-        var username = message.From?.Username ?? "Unknown";
+        var username = message.From?.Username ?? $"User_{telegramId}";
+
+        _logger.LogInformation("Processing message from {Username} ({TelegramId}): {Text}", 
+            username, telegramId, text);
 
         try
         {
-            var user = await _userService.GetOrCreateUserAsync(chatId, username);
-
-            if (text.StartsWith("/in "))
+            var user = await _userService.GetOrCreateUserAsync(telegramId, username);
+            
+            var handler = _commandHandlers.FirstOrDefault(h => text.StartsWith(h.Command));
+            
+            string responseMessage;
+            if (handler != null)
             {
-                await HandleIncomeCommandAsync(chatId, text, user.Id);
-            }
-            else if (text.StartsWith("/out "))
-            {
-                await HandleExpenseCommandAsync(chatId, text, user.Id);
-            }
-            else if (text.StartsWith("/saldo"))
-            {
-                await HandleBalanceCommandAsync(chatId, user.Id);
-            }
-            else if (text.StartsWith("/recap "))
-            {
-                await HandleRecapCommandAsync(chatId, text, user.Id);
-            }
-            else if (text.StartsWith("/start"))
-            {
-                await HandleStartCommandAsync(chatId, username);
+                responseMessage = await handler.HandleAsync(chatId, text, user.Id, username);
             }
             else
             {
-                await SendMessageAsync(chatId, "❌ Command tidak dikenal. Gunakan /start untuk bantuan.");
+                responseMessage = MessageFormatter.GetInvalidFormatMessage();
             }
+
+            await SendMessageAsync(chatId, responseMessage);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing update from chat {ChatId}", chatId);
-            await SendMessageAsync(chatId, "❌ Terjadi kesalahan. Silakan coba lagi.");
+            _logger.LogError(ex, "Error processing update for user {TelegramId}", telegramId);
+            await SendMessageAsync(chatId, ErrorMessages.GenericError);
         }
-    }
-
-    private async Task HandleIncomeCommandAsync(long chatId, string text, Guid userId)
-    {
-        var (category, note, amount) = CommandParser.ParseTransaction(text);
-
-        if (category == null || amount == null)
-        {
-            await SendMessageAsync(chatId, "❌ Format salah! Gunakan: `/in [kategori] [keterangan] [jumlah]`\nContoh: `/in gaji bulanan 5000000`");
-            return;
-        }
-
-        var categoryEntity = await _categoryService.GetOrCreateCategoryAsync(userId, category, TransactionType.Income);
-        await _transactionService.AddTransactionAsync(userId, categoryEntity!.Id, TransactionType.Income, amount.Value, note ?? "", DateTime.UtcNow);
-
-        await SendMessageAsync(chatId, $"✅ *Pemasukan dicatat!*\n\n💰 Kategori: {category}\n📝 Keterangan: {note}\n💵 Jumlah: Rp{amount:N0}");
-    }
-
-    private async Task HandleExpenseCommandAsync(long chatId, string text, Guid userId)
-    {
-        var (category, note, amount) = CommandParser.ParseTransaction(text);
-
-        if (category == null || amount == null)
-        {
-            await SendMessageAsync(chatId, "❌ Format salah! Gunakan: `/out [kategori] [keterangan] [jumlah]`\nContoh: `/out makan nasi goreng 15000`");
-            return;
-        }
-
-        var categoryEntity = await _categoryService.GetOrCreateCategoryAsync(userId, category, TransactionType.Expense);
-        await _transactionService.AddTransactionAsync(userId, categoryEntity!.Id, TransactionType.Expense, amount.Value, note ?? "", DateTime.UtcNow);
-
-        await SendMessageAsync(chatId, $"✅ *Pengeluaran dicatat!*\n\n💸 Kategori: {category}\n📝 Keterangan: {note}\n💵 Jumlah: Rp{amount:N0}");
-    }
-
-    private async Task HandleBalanceCommandAsync(long chatId, Guid userId)
-    {
-        var balance = await _transactionService.GetBalanceAsync(userId);
-        var (income, expense) = await _transactionService.GetTotalIncomeExpenseAsync(userId);
-
-        var message = $"💰 *Saldo Kamu*\n\n" +
-                     $"📈 Total Pemasukan: Rp{income:N0}\n" +
-                     $"📉 Total Pengeluaran: Rp{expense:N0}\n" +
-                     $"━━━━━━━━━━━━━━\n" +
-                     $"💵 *Saldo: Rp{balance:N0}*";
-
-        await SendMessageAsync(chatId, message);
-    }
-
-    private async Task HandleRecapCommandAsync(long chatId, string text, Guid userId)
-    {
-        var (startDate, endDate) = CommandParser.ParseRecap(text);
-
-        if (startDate == null || endDate == null)
-        {
-            await SendMessageAsync(chatId, "❌ Format salah! Gunakan: `/recap [tanggal1] - [tanggal2]`\nContoh: `/recap 1/10/2025 - 30/10/2025`");
-            return;
-        }
-
-        var (income, expense, balance) = await _transactionService.GetRecapAsync(userId, startDate.Value, endDate.Value);
-
-        var message = $"📊 *Rekap Periode*\n" +
-                     $"📅 {startDate:dd/MM/yyyy} - {endDate:dd/MM/yyyy}\n\n" +
-                     $"📈 Total Pemasukan: Rp{income:N0}\n" +
-                     $"📉 Total Pengeluaran: Rp{expense:N0}\n" +
-                     $"━━━━━━━━━━━━━━\n" +
-                     $"💵 *Saldo: Rp{balance:N0}*";
-
-        await SendMessageAsync(chatId, message);
-    }
-
-    private async Task HandleStartCommandAsync(long chatId, string username)
-    {
-        var message = $"👋 Halo *{username}*! Selamat datang di Finance Tracker Bot!\n\n" +
-                     "📝 *Command yang tersedia:*\n" +
-                     "`/in [kategori] [keterangan] [jumlah]` - Catat pemasukan\n" +
-                     "`/out [kategori] [keterangan] [jumlah]` - Catat pengeluaran\n" +
-                     "`/saldo` - Lihat saldo\n" +
-                     "`/recap [tgl1] - [tgl2]` - Rekap periode\n\n" +
-                     "Contoh:\n" +
-                     "`/in gaji bulanan 5000000`\n" +
-                     "`/out makan nasi goreng 15000`\n" +
-                     "`/recap 1/10/2025 - 30/10/2025`";
-
-        await SendMessageAsync(chatId, message);
     }
 }

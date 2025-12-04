@@ -1,5 +1,6 @@
 using FinanceTracker.Api.Data;
 using FinanceTracker.Api.Models;
+using FinanceTracker.Api.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTracker.Api.Services;
@@ -18,7 +19,7 @@ public class UserService : IUserService
     public async Task<User?> GetUserByTelegramIdAsync(long telegramId)
     {
         return await _context.Users
-            .FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+            .FirstOrDefaultAsync(user => user.TelegramId == telegramId);
     }
 
     public async Task<User> GetOrCreateUserAsync(long telegramId, string username)

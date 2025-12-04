@@ -1,20 +1,16 @@
+using FinanceTracker.Api.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
-    .AddEnvironmentVariables();
+builder.Services.AddApplicationServices(builder.Environment);
+builder.Services.AddDatabaseServices(builder.Configuration);
+builder.Services.AddTelegramServices(builder.Configuration);
+builder.Services.AddValidationServices();
 
-var dbConnection = builder.Configuration["DatabaseSettings:ConnectionString"];
-if (dbConnection != null && dbConnection.StartsWith("env:"))
-{
-    var envKey = dbConnection.Replace("env:", "");
-    dbConnection = Environment.GetEnvironmentVariable(envKey);
-}
+var app = builder.Build();
 
-var botToken = builder.Configuration["TelegramSettings:BotToken"];
-if (botToken != null && botToken.StartsWith("env:"))
-{
-    var envKey = botToken.Replace("env:", "");
-    botToken = Environment.GetEnvironmentVariable(envKey);
-}
+app.ConfigureMiddleware(builder.Environment);
+
+await app.MigrateDatabaseAsync();
+
+app.Run();
